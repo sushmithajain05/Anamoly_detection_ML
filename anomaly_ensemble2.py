@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from sklearn.ensemble import IsolationForest
+from scipy.stats import t
 import dash
 from dash import dcc, html, Input, Output
- 
+
 SI_UNITS = {
     "power_load": "kW"  
 }
@@ -15,16 +15,36 @@ df["timestamp"] = pd.to_datetime(df["timestamp"])
 df = df.sort_values("timestamp")
 df = df.dropna(subset=["power_load"])
 
+df = df.set_index("timestamp").resample("1T").mean(numeric_only=True).interpolate().reset_index()
+
 window_size = 100
 df["expected_value"] = df["power_load"].rolling(window=window_size, center=True, min_periods=1).mean()
 df["std_dev"] = df["power_load"].rolling(window=window_size, center=True, min_periods=1).std()
 df["upper_boundary"] = df["expected_value"] + (2 * df["std_dev"])
 df["lower_boundary"] = df["expected_value"] - (2 * df["std_dev"])
 
-model = IsolationForest(contamination=0.1, random_state=42, n_jobs=-1)
-df["anomaly_score"] = model.fit_predict(df[["power_load"]])
+def generalized_esd_test(series, alpha=0.05):
+    anomalies = []
+    temp_series = series.copy()
+    for _ in range(10):  
+        mean = temp_series.mean()
+        std_dev = temp_series.std()
+        max_dev = (temp_series - mean).abs().max()
+        test_stat = max_dev / std_dev
+        critical_value = t.ppf(1 - alpha / (2 * len(temp_series)), len(temp_series) - 1)
+        if test_stat > critical_value:
+            anomaly_index = (temp_series - mean).abs().idxmax()
+            anomalies.append(anomaly_index)
+            temp_series = temp_series.drop(anomaly_index)
+        else:
+            break
+    return anomalies
 
-df_anomalies = df[df["anomaly_score"] == -1]
+anomaly_indices = generalized_esd_test(df["power_load"])
+df["anomaly_score"] = 0
+df.loc[anomaly_indices, "anomaly_score"] = 1
+
+df_anomalies = df[df["anomaly_score"] == 1]
 df_anomalies["deviation"] = df_anomalies["power_load"] - df_anomalies["expected_value"]
 
 def get_anomaly_reason(row):

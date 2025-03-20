@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from sklearn.ensemble import IsolationForest
+from statsmodels.tsa.seasonal import STL
+from scipy.fftpack import fft
+from scipy.signal import find_peaks
 import dash
 from dash import dcc, html, Input, Output
- 
+
 SI_UNITS = {
     "power_load": "kW"  
 }
@@ -15,16 +17,31 @@ df["timestamp"] = pd.to_datetime(df["timestamp"])
 df = df.sort_values("timestamp")
 df = df.dropna(subset=["power_load"])
 
+
+if df["timestamp"].diff().min().seconds > 0:
+    df = df.set_index("timestamp").resample("1T").mean().interpolate().reset_index()
+
+power_spectrum = np.abs(np.fft.fft(df["power_load"]))
+peaks, _ = find_peaks(power_spectrum)
+period = peaks[0] if len(peaks) > 0 else 1440  
+
+stl = STL(df["power_load"], period=period)
+result = stl.fit()
+df["trend"] = result.trend
+df["seasonal"] = result.seasonal
+df["residual"] = result.resid
+
 window_size = 100
-df["expected_value"] = df["power_load"].rolling(window=window_size, center=True, min_periods=1).mean()
-df["std_dev"] = df["power_load"].rolling(window=window_size, center=True, min_periods=1).std()
+df["expected_value"] = df["trend"]
+df["std_dev"] = df["residual"].rolling(window=window_size, center=True, min_periods=1).std()
 df["upper_boundary"] = df["expected_value"] + (2 * df["std_dev"])
 df["lower_boundary"] = df["expected_value"] - (2 * df["std_dev"])
 
-model = IsolationForest(contamination=0.1, random_state=42, n_jobs=-1)
-df["anomaly_score"] = model.fit_predict(df[["power_load"]])
+fft_values = np.abs(fft(df["power_load"].to_numpy()))  
+threshold = np.percentile(fft_values, 70)
+df["anomaly_score"] = (fft_values > threshold).astype(int)
 
-df_anomalies = df[df["anomaly_score"] == -1]
+df_anomalies = df[df["anomaly_score"] == 1]
 df_anomalies["deviation"] = df_anomalies["power_load"] - df_anomalies["expected_value"]
 
 def get_anomaly_reason(row):

@@ -17,17 +17,21 @@ df["upper_boundary"] = df["expected_value"] + (2 * df["std_dev"])
 df["lower_boundary"] = df["expected_value"] - (2 * df["std_dev"])
 
 def detect_anomalies_stl():
-    period = 1440  
+    period = 1440 
+    
     df_sorted = df.set_index("timestamp")
     numeric_cols = df_sorted.select_dtypes(include=["number"]).columns
-    df_resampled = df_sorted[numeric_cols].resample("min").mean().interpolate()  
+    df_resampled = df_sorted[numeric_cols].resample("T").mean().interpolate() 
+    
+    if df_resampled.index.freq is None:
+        df_resampled.index.freq = "T"  
 
     if len(df_resampled) < period:
         period = max(2, len(df_resampled) // 10)  
 
     df_resampled["power_load"] = pd.to_numeric(df_resampled["power_load"], errors="coerce")
-
     df_resampled = df_resampled.dropna()
+
 
     stl = STL(df_resampled["power_load"], seasonal=period)
     result = stl.fit()
@@ -36,7 +40,7 @@ def detect_anomalies_stl():
     threshold = 3 * residual.std()
 
     anomalies = df_resampled[np.abs(residual) > threshold].reset_index()
-    anomalies["deviation"] = anomalies["power_load"] - anomalies["power_load"].rolling(window=100, center=True, min_periods=1).mean()
+    anomalies["deviation"] = anomalies["power_load"] - df_resampled["power_load"].rolling(window=100, center=True, min_periods=1).mean()
 
     anomalies["hover_text"] = anomalies.apply(
         lambda row: f"Date & Time: {row['timestamp']}<br>"
@@ -77,17 +81,22 @@ def update_graph(start_date, end_date):
     filtered_df = df[(df['timestamp'] >= start_date) & (df['timestamp'] <= end_date)]
     df_anomalies = detect_anomalies_stl()
     filtered_anomalies = df_anomalies[(df_anomalies['timestamp'] >= start_date) & (df_anomalies['timestamp'] <= end_date)]
-    df_sampled = filtered_df.iloc[::40]
+    df_sampled = filtered_df.iloc[::40] 
     
     fig = go.Figure()
+ 
     fig.add_trace(go.Scatter(x=df_sampled["timestamp"], y=df_sampled["power_load"],
                              mode="lines", name="Actual Value", line=dict(color="blue")))
+
     fig.add_trace(go.Scatter(x=df_sampled["timestamp"], y=df_sampled["expected_value"],
                              mode="lines", name="Expected Value", line=dict(color="green", dash="dash")))
+
     fig.add_trace(go.Scatter(x=df_sampled["timestamp"].tolist() + df_sampled["timestamp"].tolist()[::-1],
                              y=df_sampled["upper_boundary"].tolist() + df_sampled["lower_boundary"].tolist()[::-1],
                              fill='toself', fillcolor='rgba(173, 216, 230, 0.4)',
                              line=dict(color='rgba(255,255,255,0)'), hoverinfo="skip", name="Boundary"))
+    
+  
     fig.add_trace(go.Scatter(x=filtered_anomalies["timestamp"], y=filtered_anomalies["power_load"],
                              mode="markers", name="Anomaly", marker=dict(color="red", size=6),
                              text=filtered_anomalies["hover_text"], hoverinfo="text"))
@@ -95,6 +104,7 @@ def update_graph(start_date, end_date):
     fig.update_layout(title="Anomaly Detection using STL",
                       xaxis_title="Timestamp", yaxis_title="Power Load",
                       xaxis=dict(tickangle=45), template="plotly_white")
+    
     return fig
 
 if __name__ == '__main__':
