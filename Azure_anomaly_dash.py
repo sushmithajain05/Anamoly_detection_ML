@@ -6,31 +6,31 @@ import dash
 from dash import dcc, html, Input, Output
  
 SI_UNITS = {
-    "power_load": "kW"  
+    "power_load-W": "kW"  
 }
-file_path = "EB_2021.csv"
+file_path = "EB_2024.csv"
 df = pd.read_csv(file_path)
 
 df["timestamp"] = pd.to_datetime(df["timestamp"])
 df = df.sort_values("timestamp")
-df = df.dropna(subset=["power_load"])
+df = df.dropna(subset=["power_load-W"])
 
 window_size = 100
-df["expected_value"] = df["power_load"].rolling(window=window_size, center=True, min_periods=1).mean()
-df["std_dev"] = df["power_load"].rolling(window=window_size, center=True, min_periods=1).std()
+df["expected_value"] = df["power_load-W"].rolling(window=window_size, center=True, min_periods=1).mean()
+df["std_dev"] = df["power_load-W"].rolling(window=window_size, center=True, min_periods=1).std()
 df["upper_boundary"] = df["expected_value"] + (2 * df["std_dev"])
 df["lower_boundary"] = df["expected_value"] - (2 * df["std_dev"])
 
-model = IsolationForest(contamination=0.1, random_state=42, n_jobs=-1)
-df["anomaly_score"] = model.fit_predict(df[["power_load"]])
+model = IsolationForest(random_state=42, n_jobs=-1)
+df["anomaly_score"] = model.fit_predict(df[["power_load-W"]])
 
 df_anomalies = df[df["anomaly_score"] == -1]
-df_anomalies["deviation"] = df_anomalies["power_load"] - df_anomalies["expected_value"]
+df_anomalies["deviation"] = df_anomalies["power_load-W"] - df_anomalies["expected_value"]
 
 def get_anomaly_reason(row):
-    if row["power_load"] > row["upper_boundary"]:
+    if row["power_load-W"] > row["upper_boundary"]:
         return "Sudden spike: Power load exceeded expected range."
-    elif row["power_load"] < row["lower_boundary"]:
+    elif row["power_load-W"] < row["lower_boundary"]:
         return "Sudden drop: Power load fell below expected range."
     else:
         return "Unusual fluctuation detected."
@@ -39,10 +39,10 @@ df_anomalies["reason"] = df_anomalies.apply(get_anomaly_reason, axis=1)
 
 df_anomalies["hover_text"] = df_anomalies.apply(
     lambda row: f"Date & Time: {row['timestamp']}<br>"
-                f"Feature: Power Load ({SI_UNITS['power_load']})<br>"
-                f"Expected Value: {row['expected_value']:.2f} {SI_UNITS['power_load']}<br>"
-                f"Actual Value: {row['power_load']:.2f} {SI_UNITS['power_load']}<br>"
-                f"Deviation: {row['deviation']:.2f} {SI_UNITS['power_load']}<br>"
+                f"Feature: Power Load ({SI_UNITS['power_load-W']})<br>"
+                f"Expected Value: {row['expected_value']:.2f} {SI_UNITS['power_load-W']}<br>"
+                f"Actual Value: {row['power_load-W']:.2f} {SI_UNITS['power_load-W']}<br>"
+                f"Deviation: {row['deviation']:.2f} {SI_UNITS['power_load-W']}<br>"
                 f"Reason: {row['reason']}", axis=1
 )
 
@@ -75,21 +75,21 @@ def update_graph(start_date, end_date):
 
     fig = go.Figure()
     
-    fig.add_trace(go.Scatter(x=df_sampled["timestamp"], y=df_sampled["power_load"],
-                             mode="lines", name=f"Actual Value ({SI_UNITS['power_load']})", line=dict(color="blue")))
+    fig.add_trace(go.Scatter(x=df_sampled["timestamp"], y=df_sampled["power_load-W"],
+                             mode="lines", name=f"Actual Value ({SI_UNITS['power_load-W']})", line=dict(color="blue")))
     fig.add_trace(go.Scatter(x=df_sampled["timestamp"], y=df_sampled["expected_value"],
-                             mode="lines", name=f"Expected Value ({SI_UNITS['power_load']})", line=dict(color="green", dash="dash")))
+                             mode="lines", name=f"Expected Value ({SI_UNITS['power_load-W']})", line=dict(color="green", dash="dash")))
     fig.add_trace(go.Scatter(x=df_sampled["timestamp"].tolist() + df_sampled["timestamp"].tolist()[::-1],
                              y=df_sampled["upper_boundary"].tolist() + df_sampled["lower_boundary"].tolist()[::-1],
                              fill='toself', fillcolor='rgba(173, 216, 230, 0.4)',
                              line=dict(color='rgba(255,255,255,0)'), hoverinfo="skip", name="Boundary"))
-    fig.add_trace(go.Scatter(x=filtered_anomalies["timestamp"], y=filtered_anomalies["power_load"],
-                             mode="markers", name=f"Anomaly ({SI_UNITS['power_load']})", marker=dict(color="red", size=6),
+    fig.add_trace(go.Scatter(x=filtered_anomalies["timestamp"], y=filtered_anomalies["power_load-W"],
+                             mode="markers", name=f"Anomaly ({SI_UNITS['power_load-W']})", marker=dict(color="red", size=6),
                              text=filtered_anomalies["hover_text"], hoverinfo="text"))
     
     fig.update_layout(title="Anomaly Detection on Power Load",
                       xaxis_title="Timestamp", 
-                      yaxis_title=f"Power Load ({SI_UNITS['power_load']})",
+                      yaxis_title=f"Power Load ({SI_UNITS['power_load-W']})",
                       xaxis=dict(tickangle=45), template="plotly_white")
     return fig
 
