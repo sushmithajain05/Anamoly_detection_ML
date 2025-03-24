@@ -39,7 +39,7 @@ df_anomalies["reason"] = df_anomalies.apply(get_anomaly_reason, axis=1)
 
 df_anomalies["hover_text"] = df_anomalies.apply(
     lambda row: f"Date & Time: {row['timestamp']}<br>"
-                f"Feature: Power Load ({SI_UNITS['power_load-W']})<br>"
+                f"Feature: Power Load ({['power_load-W']})<br>"
                 f"Expected Value: {row['expected_value']:.2f} {SI_UNITS['power_load-W']}<br>"
                 f"Actual Value: {row['power_load-W']:.2f} {SI_UNITS['power_load-W']}<br>"
                 f"Deviation: {row['deviation']:.2f} {SI_UNITS['power_load-W']}<br>"
@@ -95,3 +95,4 @@ def update_graph(start_date, end_date):
 
 if __name__ == '__main__':
     app.run_server(debug=True)
+

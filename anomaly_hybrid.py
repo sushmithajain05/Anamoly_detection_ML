@@ -24,7 +24,6 @@ df["seasonal"] = stl_result.seasonal
 df["residual"] = stl_result.resid
 df["stl_anomaly"] = np.abs(df["residual"]) > (2 * np.std(df["residual"]))
 
-
 df["z_score"] = zscore(df["power_load"])
 df["esd_anomaly"] = np.abs(df["z_score"]) > 3
 
@@ -37,6 +36,9 @@ df["dynamic_anomaly"] = (df["power_load"] > df["upper_boundary"]) | (df["power_l
 
 df["final_anomaly"] = df[["fft_anomaly", "stl_anomaly", "esd_anomaly", "dynamic_anomaly"]].any(axis=1)
 df_anomalies = df[df["final_anomaly"]]
+
+df_anomalies.to_csv("anomalies_detected_hybrid.csv", index=False)
+print("Anomalies saved to anomalies_detected_hybrid.csv")
 
 app = dash.Dash(__name__)
 app.layout = html.Div([
@@ -74,4 +76,4 @@ def update_graph(start_date, end_date):
     return fig
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run(debug=True)
